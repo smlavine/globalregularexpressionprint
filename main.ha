@@ -5,8 +5,8 @@ use io;
 use os;
 use strings;
 
-// Converts a BRE to an ERE. Hare's regex module understands EREs only, so to
-// accept BREs (which grep(1p) does by default) we must do this conversion.
+// Converts a BRE to an ERE. Hare's regex module understands EREs only.
+// By default, grep(1p) accepts BREs, so we must do this conversion.
 fn bre_to_ere(s: *str) void = {
 	let r = strings::toutf8(*s);
 
