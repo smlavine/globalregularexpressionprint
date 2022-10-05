@@ -3,7 +3,7 @@
 include config.mk
 
 NAME = globalregularexpressionprint
-SRC = main.ha
+SRC = grep.ha
 
 all: $(NAME)
 
