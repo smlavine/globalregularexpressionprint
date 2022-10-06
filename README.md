@@ -19,6 +19,6 @@ make install
 Relevant standards:
 
 - [grep](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/grep.html)
-- [Regular Expressions](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#top)
+- [Regular Expressions](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html)
 
 Patches are welcome: <https://lists.sr.ht/~smlavine/globalregularexpressionprint-devel>
