@@ -1,6 +1,6 @@
 # [globalregularexpressionprint](https://sr.ht/~smlavine/globalregularexpressionprint)
 
-An implementation of the grep UNIX utility in the [Hare programming
+An strictly POSIX-compliant implementation of grep in the [Hare programming
 language](https://harelang.org).
 
 To build:
