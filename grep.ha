@@ -59,7 +59,7 @@ fn bre_to_ere(s: *str) void = {
 		};
 	};
 
-	*s = strings::fromutf8(r);
+	*s = strings::fromutf8(r)!;
 };
 
 // Opens a file. This is a wrapper around [[os::open]].
@@ -155,7 +155,7 @@ fn search(
 		case io::EOF =>
 			break;
 		case let s: []u8 =>
-			yield strings::fromutf8(s);
+			yield strings::fromutf8(s)!;
 		};
 		defer free(line);
 
