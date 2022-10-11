@@ -73,7 +73,7 @@ fn bre_to_ere(s: *str) (void | utf8::invalid) = {
 // Opens a file. This is a wrapper around [[os::open]].
 // If the path is equal to "-", then [[os::stdin]] is returned instead.
 // On failure, an error message is printed, unless the -s option is present.
-fn openfile(path: str) (io::handle | nonfatal) = {
+fn openfile_or_printerror(path: str) (io::handle | nonfatal) = {
 	if (path == "-") {
 		return os::stdin;
 	};
@@ -104,7 +104,7 @@ fn print_all_files(names: []str) (void | nonfatal) = {
 	let ret: (void | nonfatal) = void;
 
 	for (let i = 0z; i < len(names); i += 1) {
-		const f = match (openfile(names[i])) {
+		const f = match (openfile_or_printerror(names[i])) {
 		case nonfatal =>
 			ret = nonfatal;
 			continue;
@@ -236,7 +236,7 @@ export fn main() void = {
 		};
 	} else {
 		for (let i = 1z; i < len(cmd.args); i += 1) {
-			const f = match (openfile(cmd.args[i])) {
+			const f = match (openfile_or_printerror(cmd.args[i])) {
 			case nonfatal =>
 				exitcode = status::ERROR;
 				continue;
