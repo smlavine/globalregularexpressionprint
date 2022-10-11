@@ -16,6 +16,7 @@
 
 use bufio;
 use bytes;
+use encoding::utf8;
 use fmt;
 use fs;
 use getopt;
@@ -34,7 +35,7 @@ type status = enum {
 
 // Converts a BRE to an ERE.
 // The regex module only matches EREs, but grep(1p) matches BREs by default.
-fn bre_to_ere(s: *str) void = {
+fn bre_to_ere(s: *str) (void | utf8::invalid) = {
 	let r = strings::toutf8(*s);
 
 	const chars: [_]u8 = ['?', '+', '(', ')', '{', '}', '|'];
@@ -59,7 +60,7 @@ fn bre_to_ere(s: *str) void = {
 		};
 	};
 
-	*s = strings::fromutf8(r)!;
+	*s = strings::fromutf8(r)?;
 };
 
 // Opens a file. This is a wrapper around [[os::open]].
@@ -186,7 +187,9 @@ export fn main() void = {
 		os::exit(status::ERROR);
 	};
 
-	bre_to_ere(&cmd.args[0]);
+	if (bre_to_ere(&cmd.args[0]) is utf8::invalid) {
+		fmt::fatal("Invalid UTF-8 sequence in pattern");
+	};
 
 	const patterns: []regex::regex = {
 		let patterns: []regex::regex = [];
