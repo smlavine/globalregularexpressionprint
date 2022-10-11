@@ -25,6 +25,13 @@ use os;
 use regex;
 use strings;
 
+// Signifies that a non-fatal error was encountered during the course of
+// executing a function.
+// In this context, "non-fatal" means that the program can still continue to
+// run regardless of the error, but that the function failed to complete its
+// task.
+type nonfatal = !void;
+
 // Meaningful exit statuses.
 // See grep(1p), "EXIT STATUS".
 type status = enum {
@@ -66,7 +73,7 @@ fn bre_to_ere(s: *str) (void | utf8::invalid) = {
 // Opens a file. This is a wrapper around [[os::open]].
 // If the path is equal to "-", then [[os::stdin]] is returned instead.
 // On failure, an error message is printed, unless the -s option is present.
-fn openfile(path: str) (io::handle | void) = {
+fn openfile(path: str) (io::handle | nonfatal) = {
 	if (path == "-") {
 		return os::stdin;
 	};
@@ -78,7 +85,7 @@ fn openfile(path: str) (io::handle | void) = {
 			path,
 			fs::strerror(e),
 		)!;
-		return void;
+		return nonfatal;
 	case let f: io::file =>
 		return f;
 	};
@@ -88,19 +95,18 @@ fn openfile(path: str) (io::handle | void) = {
 // This should be invoked if an empty pattern_list is provided; the grep
 // standard states that "[a] null [BRE, ERE] shall match every line."
 // If no names are provided, then stdin is copied to stdout instead.
-// The amount of non-fatal errors encountered while executing the function is
-// returned.
-fn print_all_files(names: []str) uint = {
+fn print_all_files(names: []str) (void | nonfatal) = {
 	if (len(names) == 0) {
 		io::copy(os::stdout, os::stdin)!;
-		return 0;
+		return void;
 	};
 
-	let erroramt: uint = 0;
+	let ret: (void | nonfatal) = void;
+
 	for (let i = 0z; i < len(names); i += 1) {
 		const f = match (openfile(names[i])) {
-		case void =>
-			erroramt += 1;
+		case nonfatal =>
+			ret = nonfatal;
 			continue;
 		case let f: io::handle =>
 			yield f;
@@ -114,26 +120,21 @@ fn print_all_files(names: []str) uint = {
 				names[i],
 				io::strerror(e),
 			)!;
-			erroramt += 1;
+			ret = nonfatal;
 		case size => void;
 		};
 	};
 
-	return erroramt;
+	return ret;
 };
 
-// Prints the lines from file that match at least one of the patterns.
-// On error, the amount of non-fatal errors encountered while executing the
-// function is returned. Otherwise, whether or not the file matched at least
-// one of the patterns is returned.
-// TODO: Add a better way of determining error for exit status than returning
-// the amount of errors and summing them. It doesn't make sense for this
-// interface.
+// Prints the lines from the file that match at least one of the patterns.
+// Returns whether the file matched at least one of the patterns.
 fn search(
 	file: io::handle,
 	name: str,
 	patterns: []regex::regex,
-) (uint | bool) = {
+) (bool | nonfatal) = {
 	let selected = false;
 	for (true) {
 		// TODO: io::drain => strings::tokenize(s, "\n") instead of
@@ -152,7 +153,7 @@ fn search(
 				name,
 				io::strerror(e),
 			)!;
-			return 1;
+			return nonfatal;
 		case io::EOF =>
 			break;
 		case let s: []u8 =>
@@ -217,51 +218,42 @@ export fn main() void = {
 		free(patterns);
 	};
 
-	// Used to determine the correct exit status to use.
-	// TODO: improve/get rid of
-	let erroramt: uint = 0;
-	let selected = false;
+	let exitcode = status::NONE_SELECTED;
 
 	if (len(patterns) == 0) {
 		// "A null [BRE, ERE] shall match every line."
-		erroramt += print_all_files(cmd.args[1..]);
+		if (print_all_files(cmd.args[1..]) is nonfatal) {
+			exitcode = status::ERROR;
+		};
 	} else if (len(cmd.args) == 1) {
 		match (search(os::stdin, "<stdin>", patterns)) {
-		case let u: uint =>
-			erroramt += u;
+		case nonfatal =>
+			exitcode = status::ERROR;
 		case let b: bool =>
-			if (!selected && b) {
-				selected = true;
+			if (b && exitcode == status::NONE_SELECTED) {
+				exitcode = status::SELECTED;
 			};
 		};
 	} else {
 		for (let i = 1z; i < len(cmd.args); i += 1) {
 			const f = match (openfile(cmd.args[i])) {
-			case void =>
-				erroramt += 1;
+			case nonfatal =>
+				exitcode = status::ERROR;
 				continue;
 			case let f: io::handle =>
 				yield f;
 			};
 			defer io::close(f): void;
 			match (search(f, cmd.args[i], patterns)) {
-			case let u: uint =>
-				erroramt += u;
+			case nonfatal =>
+				exitcode = status::ERROR;
 			case let b: bool =>
-				if (!selected && b) {
-					selected = true;
+				if (b && exitcode == status::NONE_SELECTED) {
+					exitcode = status::SELECTED;
 				};
 			};
 		};
 	};
 
-	if (erroramt == 0) {
-		if (selected) {
-			os::exit(status::SELECTED);
-		} else {
-			os::exit(status::NONE_SELECTED);
-		};
-	} else {
-		os::exit(status::ERROR);
-	};
+	os::exit(exitcode);
 };
