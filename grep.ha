@@ -23,6 +23,7 @@ use getopt;
 use io;
 use os;
 use regex;
+use rt::{STDERR_FILENO}; // XXX: see err declaration below
 use strings;
 
 // Signifies that a non-fatal error was encountered during the course of
@@ -39,6 +40,12 @@ type status = enum {
 	NONE_SELECTED,
 	ERROR,
 };
+
+// Global handle for writing messages about non-fatal errors.
+// XXX: `= os::stderr` does not work at the moment:
+// "Unable to evaluate global initializer at compile time"
+// This is a workaround for now.
+let nf_err: io::handle = STDERR_FILENO;
 
 // Converts a BRE to an ERE.
 // The regex module only matches EREs, but grep(1p) matches BREs by default.
@@ -72,15 +79,14 @@ fn bre_to_ere(s: *str) (void | utf8::invalid) = {
 
 // Opens a file. This is a wrapper around [[os::open]].
 // If the path is equal to "-", then [[os::stdin]] is returned instead.
-// On failure, an error message is printed, unless the -s option is present.
+// On failure, an error message is printed and nonfatal is returned.
 fn openfile_or_printerror(path: str) (io::handle | nonfatal) = {
 	if (path == "-") {
 		return os::stdin;
 	};
 	match (os::open(path)) {
 	case let e: fs::error =>
-		// TODO: -s error message suppression
-		fmt::errorfln("{}: {}: {}",
+		fmt::fprintfln(nf_err, "{}: {}: {}",
 			os::args[0],
 			path,
 			fs::strerror(e),
@@ -95,6 +101,9 @@ fn openfile_or_printerror(path: str) (io::handle | nonfatal) = {
 // This should be invoked if an empty pattern_list is provided; the grep
 // standard states that "[a] null [BRE, ERE] shall match every line."
 // If no names are provided, then stdin is copied to stdout instead.
+// If any files fail to print, then an error message is printed, and nonfatal
+// is eventually returned, but not before attempting to print any remaining
+// files.
 fn print_all_files(names: []str) (void | nonfatal) = {
 	if (len(names) == 0) {
 		io::copy(os::stdout, os::stdin)!;
@@ -114,8 +123,7 @@ fn print_all_files(names: []str) (void | nonfatal) = {
 		defer io::close(f): void;
 		match (io::copy(os::stdout, f)) {
 		case let e: io::error =>
-			// TODO: -s error message suppression
-			fmt::errorfln("{}: {}: {}",
+			fmt::fprintfln(nf_err, "{}: {}: {}",
 				os::args[0],
 				names[i],
 				io::strerror(e),
@@ -130,6 +138,8 @@ fn print_all_files(names: []str) (void | nonfatal) = {
 
 // Prints the lines from the file that match at least one of the patterns.
 // Returns whether the file matched at least one of the patterns.
+// On failure to read from file, an error message is printed and nonfatal is
+// returned.
 fn search(
 	file: io::handle,
 	name: str,
@@ -147,8 +157,7 @@ fn search(
 		// Or we can just forget about it.
 		let line = match (bufio::scanline(file)) {
 		case let e: io::error =>
-			// TODO: -s error message suppression
-			fmt::errorfln("{}: {}: {}",
+			fmt::fprintfln(nf_err, "{}: {}: {}",
 				os::args[0],
 				name,
 				io::strerror(e),
@@ -177,11 +186,19 @@ fn search(
 export fn main() void = {
 	const help: []getopt::help = [
 		"search a file for a pattern",
+		('s', "Suppress error messages about nonexistent or unreadable files."),
 		"pattern_list",
 		"[file...]",
 	];
 	const cmd = getopt::parse(os::args, help...);
 	defer getopt::finish(&cmd);
+
+	for (let i = 0z; i < len(cmd.opts); i += 1) {
+		switch (cmd.opts[i].0) {
+		case 's' =>
+			nf_err = io::empty;
+		};
+	};
 
 	if (len(cmd.args) == 0) {
 		getopt::printusage(os::stderr, os::args[0], help);
